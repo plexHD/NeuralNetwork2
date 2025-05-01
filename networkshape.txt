@@ -1,0 +1,8 @@
+5 5 relu
+7 5 relu
+9 7 relu
+9 9 relu
+9 9 relu
+9 9 relu
+7 9 relu
+2 7 relu
