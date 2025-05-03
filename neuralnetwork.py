@@ -2,11 +2,15 @@ import numpy as np
 
 # --- Neural Network Class --- #
 class Layer:
-    def __init__(self, size, input_size, activation_function, activation_derivative=None):
+    def __init__(self, size, input_size, activation_function):
         self.size = size
         self.input_size = input_size
         self.activation_function = activation_function
-        self.activation_derivative = activation_derivative
+        self.activation_derivative = None
+        if activation_function == relu:
+            self.activation_derivative = relu_derivative
+        elif activation_function == sigmoid:
+            self.activation_derivative = sigmoid_derivative
 
         self.weights = np.random.randn(input_size, size) * 0.01
         self.biases = np.zeros((1, size))
@@ -22,8 +26,8 @@ class Network:
     def __init__(self):
         self.layers = []
 
-    def addLayer(self, size, input_size, activation_function, activation_derivative):
-        layer = Layer(size, input_size, activation_function, activation_derivative)
+    def addLayer(self, size, input_size, activation_function):
+        layer = Layer(size, input_size, activation_function)
         self.layers.append(layer)
 
     def removeLayer(self, index):
@@ -75,10 +79,13 @@ class Network:
 # --- Activation functions --- #
 def sigmoid(x):
     return 1 / (1 + np.exp(-x))
+def sigmoid_derivative(x):
+    return x * (1 - x)
 def relu(x):
     return np.maximum(0, x)
 def relu_derivative(x):
     return np.where(x > 0, 1, 0)
+
 def raw(x):
     return x
 def softmax(x):
@@ -91,66 +98,24 @@ def cross_entropy_loss(y_true, y_pred):
     loss = -np.sum(y_true * np.log(y_pred + 1e-15)) / m
     return loss
 
+net = Network()
 
-def create_network(shape):
-    pass
+def create_network(input_size, output_size, hidden_layers): 
+    # hiddenlayers: [size, activation_function, amount]
+    net.addLayer(input_size, input_size, raw) # Input layer
+    
+    for segment in hidden_layers: # hidden layers
+        if segment[1] == "sigmoid":
+            activation_function = sigmoid
+        elif segment[1] == "relu":
+            activation_function = relu
+        for i in range(segment[2]):
+            net.addLayer(segment[0], net.layers[-1].size, activation_function)
+    
+    net.addLayer(output_size, net.layers[-1].size, softmax) # Output layer
+
+def get_network():
+    return net
 
 def train(X, y, epochs, batch_size, learning_rate):
     pass
-
-# # --- Network shape creator --- #
-# create_or_load = input("Create or load network shape (create/load): ")
-# if create_or_load == "load":
-#     with open("networkshape.txt", "r") as f:
-#         lines = f.readlines()
-#         net = Network()
-#         for line in lines:
-#             size, input_size, activation_function = line.strip().split()
-#             size = int(size)
-#             input_size = int(input_size)
-#             if activation_function == "sigmoid":
-#                 activation_function = sigmoid
-#             elif activation_function == "relu":
-#                 activation_function = relu
-#                 activation_derivative = relu_derivative
-#             else:
-#                 raise ValueError("Invalid activation function")
-#             net.addLayer(size, input_size, activation_function, activation_derivative)
-#     print("Network shape loaded")
-# elif create_or_load == "create":
-#     net = Network()
-
-#     while True:
-#         create_layer = input("Create layer? (y/n): ")
-#         if create_layer == "y":
-#             size = int(input("Layer size: "))
-#             if len(net.layers) == 0:
-#                 input_size = int(input("Input size: "))
-#             else:
-#                 input_size = net.layers[-1].size
-#             activation_function = input("Activation function (sigmoid/relu): ")
-#             if activation_function == "sigmoid":
-#                 activation_function = sigmoid
-#             elif activation_function == "relu":
-#                 activation_function = relu
-#                 activation_derivative = relu_derivative
-#             else:
-#                 print("Invalid activation function")
-#                 continue
-
-#             net.addLayer(size, input_size, activation_function, activation_derivative)
-#         elif create_layer == "n":
-#             break
-#         else:
-#             print("Invalid input")
-#     print("Network shape created")
-
-# print("Layers:")
-# for i, layer in enumerate(net.layers):
-#     print(f"Layer {i}: size={layer.size}, input_size={layer.input_size}, activation_function={layer.activation_function.__name__}")
-# save = input("Save network shape? (y/n): ")
-# if save == "y":
-#     with open("networkshape.txt", "w") as f:
-#         for layer in net.layers:
-#             f.write(f"{layer.size} {layer.input_size} {layer.activation_function.__name__}\n")
-#     print("Network shape saved to networkshape.txt")
