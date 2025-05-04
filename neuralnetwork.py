@@ -1,4 +1,6 @@
 import numpy as np
+import json
+import os
 
 # --- Neural Network Class --- #
 class Layer:
@@ -47,7 +49,7 @@ class Network:
             a = layer.activation_function(z)
             layer.z = z
             layer.a = a
-            print(f"Layer {i} output: {layer.a}")
+            x = a
         return a
     
     def backward(self, y_true, y_pred, X, learning_rate=0.01): # X shape (batch_size, input_size); y_true shape (batch_size, output_size)
@@ -102,7 +104,6 @@ net = Network()
 
 def create_network(input_size, output_size, hidden_layers): 
     # hiddenlayers: [size, activation_function, amount]
-    net.addLayer(input_size, input_size, raw) # Input layer
     
     for segment in hidden_layers: # hidden layers
         if segment[1] == "sigmoid":
@@ -110,12 +111,88 @@ def create_network(input_size, output_size, hidden_layers):
         elif segment[1] == "relu":
             activation_function = relu
         for i in range(segment[2]):
-            net.addLayer(segment[0], net.layers[-1].size, activation_function)
+            if i == 0:
+                net.addLayer(segment[0], input_size, activation_function)
+            else:
+                net.addLayer(segment[0], net.layers[-1].size, activation_function)
     
     net.addLayer(output_size, net.layers[-1].size, softmax) # Output layer
 
 def get_network():
     return net
+def clear_network():
+    net.layers = []
 
 def train(X, y, epochs, batch_size, learning_rate):
-    pass
+    """
+    Train the network using mini-batch gradient descent.\n\n
+    :param X: Input data (number of samples, inputs) (rows: samples, columns: inputs)\n
+    :param y: Target data (number of samples, outputs) (rows: samples, columns: outputs)
+    """
+    num_samples = X.shape[0]
+    for epoch in range(epochs):
+        for i in range(0, num_samples, batch_size):
+            X_batch = X[i:i + batch_size]
+            y_batch = y[i:i + batch_size]
+
+            # Forward pass
+            y_pred = net.forward(X_batch)
+
+            # Backward pass
+            loss = net.backward(y_batch, y_pred, X_batch, learning_rate)
+        print(f"Epoch {epoch + 1}/{epochs}, Batch {i // batch_size + 1}, Loss: {loss:.4f}")
+
+def test(X, y):
+    """
+    Test the network on the test data.\n\n
+    :param X: Input data (number of samples, inputs) (rows: samples, columns: inputs)\n
+    :param y: Target data (number of samples, outputs) (rows: samples, columns: outputs)
+    """
+        
+    predictions = net.forward(X)
+    accuracy = np.mean(np.argmax(predictions, axis=1) == np.argmax(y, axis=1))
+    # print(f"Accuracy: {accuracy * 100:.2f}%")
+    return accuracy, predictions
+
+def save_network(filename):
+    network_data = {
+        'layers': []
+    }
+    for layer in net.layers:
+        layer_data = {
+            'size': layer.size,
+            'input_size': layer.input_size,
+            'activation_function': layer.activation_function.__name__,
+            'weights': layer.weights.tolist(),
+            'biases': layer.biases.tolist()
+        }
+        network_data['layers'].append(layer_data)
+    with open(filename, "w") as f:
+        json.dump(network_data, f)
+
+def load_network(filename):
+    with open(filename, "r") as f:
+        network_data = json.load(f)
+    
+    for layer_data in network_data["layers"]:
+        if layer_data["activation_function"] == "sigmoid":
+            activation_function = sigmoid
+        elif layer_data["activation_function"] == "relu":
+            activation_function = relu
+        elif layer_data["activation_function"] == "softmax":
+            activation_function = softmax
+        elif layer_data["activation_function"] == "raw":
+            activation_function = raw
+        else:
+            raise ValueError(f"Unsupported activation function: {layer_data['activation_function']}")
+        
+        layer = Layer(
+            size=layer_data["size"],
+            input_size=layer_data["input_size"],
+            activation_function=activation_function
+        )
+        layer.weights = np.array(layer_data["weights"])  # Konvertiere Listen zurück in numpy-Arrays
+        layer.biases = np.array(layer_data["biases"])
+        net.layers.append(layer)
+    
+    return net
