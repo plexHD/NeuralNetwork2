@@ -62,6 +62,9 @@ class Network:
         last_layer.dw = np.dot(self.layers[-2].a.T, last_layer.dz) / batch_size
         last_layer.db = np.sum(last_layer.dz, axis=0, keepdims=True) / batch_size
 
+        last_layer.weights -= learning_rate * last_layer.dw
+        last_layer.biases -= learning_rate * last_layer.db
+
         for i in reversed(range(len(self.layers) -1)):
             layer = self.layers[i]
             next_layer = self.layers[i + 1]
@@ -69,7 +72,7 @@ class Network:
 
             # calculate gradients
             layer.da = np.dot(next_layer.dz, next_layer.weights.T)
-            layer.dz = layer.da * layer.activation_derivative(layer.z)
+            layer.dz = layer.da * layer.activation_derivative(layer.a)
             layer.dw = np.dot(prev_a.T, layer.dz) / batch_size
             layer.db = np.sum(layer.dz, axis=0, keepdims=True) / batch_size
 
@@ -123,7 +126,7 @@ def get_network():
 def clear_network():
     net.layers = []
 
-def train(X, y, epochs, batch_size, learning_rate):
+def train(X, y, epochs, batch_size, learning_rate, save_interval, filename=None):
     """
     Train the network using mini-batch gradient descent.\n\n
     :param X: Input data (number of samples, inputs) (rows: samples, columns: inputs)\n
@@ -141,7 +144,9 @@ def train(X, y, epochs, batch_size, learning_rate):
             # Backward pass
             loss = net.backward(y_batch, y_pred, X_batch, learning_rate)
         print(f"Epoch {epoch + 1}/{epochs}, Batch {i // batch_size + 1}, Loss: {loss:.4f}")
-
+        if save_interval > 0 and (epoch + 1) % save_interval == 0:
+            save_network(filename)
+            print(f"Network saved")
 def test(X, y):
     """
     Test the network on the test data.\n\n

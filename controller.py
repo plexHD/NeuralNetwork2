@@ -64,7 +64,7 @@ while True:
         break
     elif command == "create":
         hidden_layers = [
-            [256, "relu", 2]
+            [128, "relu", 2]
         ]
         nn.create_network(784, 10, hidden_layers)
     elif command == "clear":
@@ -93,6 +93,12 @@ while True:
         for i, layer in enumerate(net.layers):
                 print(f"Layer: {i}, Neurons: {layer.size}, Activation: {layer.activation_function.__name__}")
     elif command == "train":
+        save_interval = int(input("Save interval in epochs: (0 to disable saving): "))
+        if save_interval > 0:
+            filename = input("Filename: ")
+            filename = "NeuralNetworks/" + filename + ".json"
+        else:
+            filename = None
         epochs = int(input("Epochs: "))
         batch_size = int(input("Batch size: "))
         start_time = time.time()
@@ -100,13 +106,14 @@ while True:
         y = y_train_one_hot
         # print(f"X shape: {X.shape}, y shape: {y.shape}")
         print("Training started...")
-        nn.train(X, y, epochs=epochs, batch_size=batch_size, learning_rate=0.01)
+        nn.train(X, y, epochs=epochs, batch_size=batch_size, learning_rate=0.001, save_interval=save_interval, filename=filename)
         end_time = time.time()
         print(f"Training completed in {end_time - start_time:.2f} seconds.")
 
     elif command == "test":
-        X = X_test[random.randint(0, X_test.shape[0] -1)].reshape(1, -1)
-        y = y_test_one_hot[random.randint(0, X_test.shape[0] -1)].reshape(1, -1)
+        index = random.randint(0, X_test.shape[0] -1)
+        X = X_test[index].reshape(1, -1)
+        y = y_test_one_hot[index].reshape(1, -1)
         accuracy, predictions = nn.test(X, y)
         predictions = np.round(predictions, 2)
 
