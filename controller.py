@@ -1,7 +1,6 @@
 import neuralnetwork as nn
 import numpy as np
 import math
-from mnist import MNIST
 import os
 import time
 import random
@@ -129,5 +128,23 @@ while True:
         plt.title("Test Image")
         plt.axis('off')
         plt.show()
+    elif command == "fulltest":
+        amount = int(input("Amount of samples to test: "))
+        accuracies = []
+        for i in range(amount):
+            index = random.randint(0, X_test.shape[0] -1)
+            X = X_test[index].reshape(1, -1)
+            y = y_test_one_hot[index].reshape(1, -1)
+            accuracy, predictions = nn.test(X, y)
+            predictions = np.round(predictions, 2)
+            accuracies.append(accuracy)
+
+            print(f"Predicted label: {np.argmax(predictions)}")
+            print(f"Correct label: {np.argmax(y)}")
+            print(f"Test accuracy: {accuracy*100}%\n")
+
+        average_accuracy = sum(accuracies) / len(accuracies)
+        print(f"Average accuracy over {amount} samples: {average_accuracy * 100:.2f}%")
+
     else:
         print("Command unknown.")
