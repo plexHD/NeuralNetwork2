@@ -5,6 +5,7 @@ from mnist import MNIST
 import os
 import time
 import random
+import matplotlib.pyplot as plt
 
 def load_mnist_images(filename):
     with open(filename, 'rb') as f:
@@ -118,8 +119,15 @@ while True:
         predictions = np.round(predictions, 2)
 
         print(f"Predictions: {predictions}")
-        print(f"Correct labels: {y}")
+        print(f"Correct labels: {y}\n")
+
+        print(f"Predicted label: {np.argmax(predictions)}")
         print(f"Test accuracy: {accuracy*100}%")
-        # print(f"Predictions shape: {predictions.shape}")
+
+        # Show the image
+        plt.imshow(X_test[index].reshape(28, 28), cmap='gray')
+        plt.title("Test Image")
+        plt.axis('off')
+        plt.show()
     else:
         print("Command unknown.")
