@@ -5,6 +5,7 @@ import os
 import time
 import random
 import matplotlib.pyplot as plt
+import PIL.Image  # Add at the top with other imports
 
 def load_mnist_images(filename):
     with open(filename, 'rb') as f:
@@ -92,6 +93,7 @@ while True:
         print(f"Network loaded from {filename}:")
         for i, layer in enumerate(net.layers):
                 print(f"Layer: {i}, Neurons: {layer.size}, Activation: {layer.activation_function.__name__}")
+    
     elif command == "train":
         save_interval = int(input("Save interval in epochs: (0 to disable saving): "))
         if save_interval > 0:
@@ -108,7 +110,8 @@ while True:
         print("Training started...")
         nn.train(X, y, epochs=epochs, batch_size=batch_size, learning_rate=0.001, save_interval=save_interval, filename=filename)
         end_time = time.time()
-        print(f"Training completed in {end_time - start_time:.2f} seconds.")
+        elapsed_minutes = (end_time - start_time) / 60
+        print(f"Training completed in {elapsed_minutes:.2f} minutes.")
 
     elif command == "test":
         index = random.randint(0, X_test.shape[0] -1)
@@ -145,6 +148,46 @@ while True:
 
         average_accuracy = sum(accuracies) / len(accuracies)
         print(f"Average accuracy over {amount} samples: {average_accuracy * 100:.2f}%")
+        
+    elif command == "customtest":
+        test_all = input("Test all images in folder? (y/n): ")
+        if test_all.lower() == "y":
+            folder_path = "./customTests/"
+            accuracies = []
 
+            for filename in os.listdir(folder_path):
+                if filename.endswith(".png") or filename.endswith(".jpg"):
+                    img_path = os.path.join(folder_path, filename)
+                    img = PIL.Image.open(img_path).convert("L").resize((28, 28))
+                    img_array = np.array(img) / 255.0
+                    X = img_array.reshape(1, -1)
+                    # Dummy label (not used for prediction)
+                    y = np.zeros((1, 10))
+                    accuracy, predictions = nn.test(X, y)
+                    predictions = np.round(predictions, 2)
+                    if np.argmax(predictions) == int(filename[0]):
+                        accuracies.append(1)
+                    else:
+                        accuracies.append(0)
+                    print(f"Predictions for {filename}: {predictions}")
+                    print(f"Predicted label: {np.argmax(predictions)}\n")
+            average_accuracy = sum(accuracies) / len(accuracies)
+            print(f"Average accuracy: {average_accuracy * 100:.2f}%")
+        else:
+            path = input("Path to image: ")
+            path = "./customTests/" + path
+            img = PIL.Image.open(path).convert("L").resize((28, 28))
+            img_array = np.array(img) / 255.0
+            X = img_array.reshape(1, -1)
+            # Dummy label (not used for prediction)
+            y = np.zeros((1, 10))
+            accuracy, predictions = nn.test(X, y)
+            predictions = np.round(predictions, 2)
+            print(f"Predictions: {predictions}")
+            print(f"Predicted label: {np.argmax(predictions)}")
+            plt.imshow(img_array, cmap='gray')
+            plt.title("Custom Image")
+            plt.axis('off')
+            plt.show()
     else:
         print("Command unknown.")
