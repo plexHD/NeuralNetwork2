@@ -149,6 +149,7 @@ def create_network(input_size, output_size, hidden_layers):
             activation_function = sigmoid
         elif segment[1] == "relu":
             activation_function = relu
+        print(segment)
         for i in range(segment[2]):
             if i == 0:
                 net.addLayer(segment[0], input_size, activation_function)
