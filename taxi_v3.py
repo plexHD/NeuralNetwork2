@@ -4,7 +4,6 @@ import numpy as np # Korrigierter Import
 import time
 import os
 
-print(np.__version__)
 # Global environment for Taxi-v3, primarily for training (no rendering needed here)
 # Die alte API wird standardmäßig verwendet, passend zu nn.train_q_learning
 env_train = gym.make("Taxi-v3") 

@@ -4,6 +4,7 @@ import math
 import os
 import time
 import random
+import pygame
 import matplotlib.pyplot as plt
 import PIL.Image
 import scipy.ndimage as ndi # Added for data augmentation
@@ -203,7 +204,9 @@ while True:
         
         end_time = time.time()
         elapsed_minutes = (end_time - start_time) / 60
-        print(f"Training completed in {elapsed_minutes:.2f} minutes.")
+        hours = int(elapsed_minutes // 60)
+        minutes = int(elapsed_minutes % 60)
+        print(f"Training completed in {hours} hours and {minutes} minutes.")
 
     elif command == "test":
         index = random.randint(0, X_test.shape[0] -1)
@@ -266,20 +269,120 @@ while True:
             average_accuracy = sum(accuracies) / len(accuracies)
             print(f"Average accuracy: {average_accuracy * 100:.2f}%")
         else:
-            path = input("Path to image: ")
-            path = "./customTests/" + path
-            img = PIL.Image.open(path).convert("L").resize((28, 28))
-            img_array = np.array(img) / 255.0
-            X = img_array.reshape(1, -1)
-            # Dummy label (not used for prediction)
-            y = np.zeros((1, 10))
-            accuracy, predictions = nn.test(X, y)
-            predictions = np.round(predictions, 2)
-            print(f"Predictions: {predictions}")
-            print(f"Predicted label: {np.argmax(predictions)}")
-            plt.imshow(img_array, cmap='gray')
-            plt.title("Custom Image")
-            plt.axis('off')
-            plt.show()
+            # It's recommended to move 'import pygame' to the top of your script.
+            survey = input("Run survey (y/n)? ").lower()
+
+            if survey == "y":
+                survey_length = int(input("Survey length: "))
+            else:
+                survey_length = 1
+
+            
+            accuracies = []
+            for i in range(survey_length):
+                pygame.init()
+
+                # Window settings
+                pixel_size = 20  # Size of each 'pixel' cell on the screen
+                grid_size = 28   # MNIST images are 28x28
+                width, height = grid_size * pixel_size, grid_size * pixel_size
+                screen = pygame.display.set_mode((width, height))
+                pygame.display.set_caption("Draw a digit (ENTER: confirm, R: reset, ESC: quit)")
+
+                # Drawing canvas (28x28 array)
+                # Initialize with zeros (black). Values will be 0.0 (black) or 1.0 (white).
+                canvas_array = np.zeros((grid_size, grid_size), dtype=float)
+                
+                drawing = False
+                running = True
+                
+                # Brush settings (e.g., a 2x2 area in the 28x28 grid)
+                # Adjust brush_radius to change thickness. 0 means 1x1, 1 means 3x3.
+                # For MNIST, thinner lines are often better. Let's use a small brush.
+                brush_radius = 1 # This will affect a (2*brush_radius+1)x(2*brush_radius+1) area. So 1 -> 3x3.
+
+                while running:
+                    for event in pygame.event.get():
+                        if event.type == pygame.QUIT:
+                            running = False
+                        if event.type == pygame.KEYDOWN:
+                            if event.key == pygame.K_RETURN: # Enter key to confirm
+                                running = False
+                            if event.key == pygame.K_r: # R key to reset canvas
+                                canvas_array.fill(0.0)
+                            if event.key == pygame.K_ESCAPE: # Escape key to quit
+                                running = False
+                                # Optionally, indicate that drawing was cancelled
+                                print("Drawing cancelled by user.")
+                                pygame.quit()
+                                
+
+                        if event.type == pygame.MOUSEBUTTONDOWN:
+                            if event.button == 1: # Left mouse button
+                                drawing = True
+                                # Also draw on click
+                                mx, my = event.pos
+                                grid_x, grid_y = mx // pixel_size, my // pixel_size
+                                for r_offset in range(-brush_radius, brush_radius + 1):
+                                    for c_offset in range(-brush_radius, brush_radius + 1):
+                                        draw_y, draw_x = grid_y + r_offset, grid_x + c_offset
+                                        if 0 <= draw_y < grid_size and 0 <= draw_x < grid_size:
+                                            canvas_array[draw_y, draw_x] = 1.0 # Draw white
+
+                        if event.type == pygame.MOUSEBUTTONUP:
+                            if event.button == 1: # Left mouse button
+                                drawing = False
+                        
+                        if event.type == pygame.MOUSEMOTION and drawing:
+                            mx, my = event.pos
+                            grid_x, grid_y = mx // pixel_size, my // pixel_size
+                            for r_offset in range(-brush_radius, brush_radius + 1):
+                                for c_offset in range(-brush_radius, brush_radius + 1):
+                                    draw_y, draw_x = grid_y + r_offset, grid_x + c_offset
+                                    if 0 <= draw_y < grid_size and 0 <= draw_x < grid_size:
+                                        canvas_array[draw_y, draw_x] = 1.0 # Draw white
+
+                    # Drawing on screen
+                    screen.fill((0, 0, 0)) # Black background
+                    for r in range(grid_size):
+                        for c in range(grid_size):
+                            if canvas_array[r, c] > 0: # If pixel is drawn (white)
+                                # canvas_array stores 0.0 to 1.0. Pygame color is 0-255.
+                                color_intensity = int(canvas_array[r, c] * 255)
+                                color = (color_intensity, color_intensity, color_intensity) # Grayscale
+                                pygame.draw.rect(screen, color, (c * pixel_size, r * pixel_size, pixel_size, pixel_size))
+                    
+                    pygame.display.flip()
+
+                pygame.quit()
+
+                # canvas_array now holds the 28x28 image data (0.0 or 1.0)
+                # The subsequent code expects 'img_array'
+                img_array = canvas_array
+                # Ensure img_array is used by the rest of the script.
+                # You might need to remove or adapt lines that load an image from a file path.
+                
+                X = img_array.reshape(1, -1)
+                # Dummy label (not used for prediction)
+                y = np.zeros((1, 10))
+                accuracy, predictions = nn.test(X, y)
+                predictions = np.round(predictions, 2)
+                print(f"Predictions: {predictions}")
+                print(f"Predicted label: {np.argmax(predictions)}")
+
+                if survey_length == 1:
+                    plt.imshow(img_array, cmap='gray')
+                    plt.title("Custom Image")
+                    plt.axis('off')
+                    plt.show()
+                else:
+                    y = input("Correct (y/n)? ")
+                    if y.lower() == 'y':
+                        accuracies.append(1)
+                    else:
+                        accuracies.append(0)
+            if survey_length > 1:
+                average_accuracy = sum(accuracies) / len(accuracies)
+                print(f"Average accuracy over {survey_length} samples: {average_accuracy * 100:.2f}%")
     else:
         print("Command unknown.")

@@ -13,6 +13,7 @@ class Layer:
             self.activation_derivative = relu_derivative
         elif activation_function == sigmoid:
             self.activation_derivative = sigmoid_derivative
+        # Add other activation functions and their derivatives if needed
 
         self.weights = np.random.randn(input_size, size) * 0.01
         self.biases = np.zeros((1, size))
@@ -40,35 +41,32 @@ class Network:
         
     def forward(self, inputs): # input shape (1, input_size)
         if inputs.shape[1] != self.layers[0].input_size:
-            raise ValueError(f"Input size {inputs.shape[1]} does not match the expected size {self.layers[0].input_size}")
+            raise ValueError(f"Input shape {inputs.shape} does not match layer input size {self.layers[0].input_size}")
         x = inputs
 
-        for i in range(len(self.layers)):
-            layer = self.layers[i]
-            z = np.dot(x, layer.weights) + layer.biases
-            a = layer.activation_function(z)
-            layer.z = z
-            layer.a = a
-            x = a
-        return a
+        for layer in self.layers: # Iterate through actual layer objects
+            layer.z = np.dot(x, layer.weights) + layer.biases
+            layer.a = layer.activation_function(layer.z)
+            x = layer.a # Output of current layer is input to next
+        return x # Return the activation of the last layer
     
     def backward(self, y_true, y_pred, X, learning_rate=0.01, loss_type="cross_entropy", clip_value=None): # X shape (batch_size, input_size); y_true shape (batch_size, output_size)
         batch_size = y_true.shape[0]
-        error = y_pred - y_true # This is d(Loss)/d(a_last) for MSE, and d(Loss)/d(z_last) for Softmax+CrossEntropy
-
-        if loss_type == "cross_entropy":
-            loss = cross_entropy_loss(y_true, y_pred)
-        elif loss_type == "mse":
-            loss = mse_loss(y_true, y_pred)
+        
+        # Calculate initial error (dL/dz_last or dL/da_last)
+        if loss_type == "cross_entropy": # Typically used with softmax output
+            # For Softmax + CrossEntropy, y_pred - y_true is dL/dz_last
+            error = y_pred - y_true 
+        elif loss_type == "mse": # Typically used with linear output for regression/Q-values
+            # For Linear + MSE, y_pred - y_true is dL/da_last.
+            # Since (da_last/dz_last) = 1 for linear, dL/dz_last = dL/da_last * 1 = y_pred - y_true
+            error = y_pred - y_true
         else:
             raise ValueError(f"Unsupported loss_type: {loss_type}")
             
         last_layer = self.layers[-1]
+        last_layer.dz = error # This is now dL/dz for the last layer
 
-        # For Softmax + CrossEntropy, error = y_pred - y_true is already dL/dz_last
-        # For Linear + MSE, error = y_pred - y_true is dL/da_last. Since da_last/dz_last = 1 (for linear), dL/dz_last = error.
-        last_layer.dz = error 
-        
         prev_a_for_last_layer = self.layers[-2].a if len(self.layers) > 1 else X
         last_layer.dw = np.dot(prev_a_for_last_layer.T, last_layer.dz) / batch_size
         last_layer.db = np.sum(last_layer.dz, axis=0, keepdims=True) / batch_size
@@ -89,12 +87,11 @@ class Network:
             layer.da = np.dot(next_layer.dz, next_layer.weights.T)
             
             if layer.activation_derivative:
-                layer.dz = layer.da * layer.activation_derivative(layer.a)
+                layer.dz = layer.da * layer.activation_derivative(layer.a) # Use stored 'a'
             else:
-                # If no derivative function is explicitly set (e.g., for 'raw' activation),
-                # and it's used in a hidden layer (unlikely for 'raw'), assume derivative is 1.
-                # This primarily applies if 'raw' was used as hidden layer activation.
-                # For output layer 'raw', its dz is handled above.
+                # This case should ideally only be for linear layers or if derivative is 1
+                # For Q-learning output layer (if linear), derivative is 1, so dz = da.
+                # If a hidden layer has no derivative set, it's an issue.
                 layer.dz = layer.da 
 
             layer.dw = np.dot(prev_a.T, layer.dz) / batch_size
@@ -106,6 +103,12 @@ class Network:
 
             layer.weights -= learning_rate * layer.dw
             layer.biases -= learning_rate * layer.db
+        
+        # Recalculate loss based on the type (optional, if needed outside)
+        if loss_type == "cross_entropy":
+            loss = cross_entropy_loss(y_true, y_pred) # y_pred here is a_last
+        elif loss_type == "mse":
+            loss = mse_loss(y_true, y_pred) # y_pred here is a_last
         return loss
     
 # --- Activation functions --- #
@@ -142,21 +145,34 @@ def mse_loss(y_true, y_pred):
 net = Network()
 
 def create_network(input_size, output_size, hidden_layers): 
-    # hiddenlayers: [size, activation_function, amount]
-    
+    clear_network()
+    # hiddenlayers: [size, activation_function_str, amount]
+    global net 
+    # It's good practice to clear the network if this function can be called multiple times
+    # to redefine it, or ensure it's only called on an empty net.
+    # clear_network() # Optional: uncomment if you want create_network to always start fresh
+
+    current_processing_input_size = input_size
+
     for segment in hidden_layers: # hidden layers
-        if segment[1] == "sigmoid":
-            activation_function = sigmoid
-        elif segment[1] == "relu":
-            activation_function = relu
-        print(segment)
-        for i in range(segment[2]):
-            if i == 0:
-                net.addLayer(segment[0], input_size, activation_function)
-            else:
-                net.addLayer(segment[0], net.layers[-1].size, activation_function)
+        size, activation_function_str, amount = segment
+        
+        activation_fn = None
+        if activation_function_str == "sigmoid":
+            activation_fn = sigmoid
+        elif activation_function_str == "relu":
+            activation_fn = relu
+        else:
+            raise ValueError(f"Unsupported activation string {activation_function_str}")
+
+        print(segment) # e.g. (64, 'relu', 1)
+        for _ in range(amount):
+            net.addLayer(size, current_processing_input_size, activation_fn)
+            current_processing_input_size = size # Output of this layer is input to next
     
-    net.addLayer(output_size, net.layers[-1].size, softmax) # Output layer
+    # Output layer for Q-values should be linear
+    net.addLayer(output_size, current_processing_input_size, raw) # Use raw (linear) activation
+    print(f"Network created with input size {input_size}, output size {output_size}, and hidden layers {hidden_layers}")
 
 def get_network():
     return net
@@ -213,6 +229,7 @@ def save_network(filename):
         json.dump(network_data, f)
 
 def load_network(filename):
+    clear_network()
     with open(filename, "r") as f:
         network_data = json.load(f)
     
@@ -244,39 +261,35 @@ def _to_one_hot(state, dimension):
     vec[state] = 1
     return vec
 
-# Ergänze zum Beispiel eine Q-Learning-Trainingsmethode:
-def train_q_learning(env, episodes, alpha=0.01, gamma=0.99, initial_epsilon=1.0, min_epsilon=0.01, epsilon_decay_rate=0.995, clip_grad_value=1.0, save_interval=0, filename=None): # Added save_interval and filename
-    epsilon = initial_epsilon
-    # Optional: Liste für das Plotten von Belohnungen
-    # total_rewards_per_episode = []
+def convert_structure(state):
+    vec = []
+    for i in range(len(state)):
+        for cell in state[i]:
+            vec.append(cell)
+    return np.array(vec)
 
+def q_train(env, episodes, learning_rate=0.001, gamma=0.99, epsilon=1, min_epsilon=0.01, epsilon_decay=0.995, clip_grad_value=1.0, save_interval=0, filename=None, max_steps=1000):
     for episode in range(episodes):
-        result = env.reset()
-        if isinstance(result, tuple):
-            state, info = result
-        else:
-            state = result
-
+        state = env.reset() # Assuming env.reset() returns the initial state
         done = False
-        current_episode_total_reward = 0
-
-        # Fortschrittsanzeige seltener, um die Konsole nicht zu überfluten
-        if episode % 50 == 0:
-            print(f"Episode {episode}/{episodes}, Epsilon: {epsilon:.4f}")
+        step_count = 0
+        total_reward = 0
 
         while not done:
-            state_vec = _to_one_hot(state, env.observation_space.n)
+            step_count += 1
+            # state_vec = _to_one_hot(state, env.observation_space_n)
+            state_vec = convert_structure(state) 
             q_values = net.forward(state_vec.reshape(1, -1))
 
             if np.random.rand() < epsilon:
-                action = env.action_space.sample()
+                action = env.action_space_sample() # Use the method directly
             else:
                 action = np.argmax(q_values)
 
             next_state, reward, done, info = env.step(action)
-            current_episode_total_reward += reward
+            total_reward += reward
             
-            next_state_vec = _to_one_hot(next_state, env.observation_space.n)
+            next_state_vec = convert_structure(next_state) # Use the attribute directly
             next_q = net.forward(next_state_vec.reshape(1, -1))
 
             target_q = q_values.copy()
@@ -284,23 +297,79 @@ def train_q_learning(env, episodes, alpha=0.01, gamma=0.99, initial_epsilon=1.0,
                 target_q[0, action] = reward
             else:
                 target_q[0, action] = reward + gamma * np.max(next_q)
-
-            # Stelle sicher, dass state_vec die korrekte Form für X in backward hat
-            # Call backward with loss_type="mse" for Q-learning and gradient clipping
-            net.backward(target_q, q_values, state_vec.reshape(1, -1), alpha, loss_type="mse", clip_value=clip_grad_value)
+            
+            net.backward(target_q, q_values, state_vec.reshape(1, -1), learning_rate, loss_type="mse", clip_value=clip_grad_value)
             state = next_state
+            if step_count >= max_steps:
+                done = True
         
-        # total_rewards_per_episode.append(current_episode_total_reward)
+        epsilon = max(min_epsilon, epsilon * epsilon_decay)
 
-        # Epsilon-Decay
-        if epsilon > min_epsilon:
-            epsilon *= epsilon_decay_rate
-        # Alternativ: epsilon = max(min_epsilon, epsilon - decay_value_per_episode)
+        if episode % 10 == 0:
+            print(f"Episode {episode}/{episodes}, Total Reward: {total_reward}, Epsilon: {epsilon:.4f}, Steps: {step_count}")
 
-        # Autosave logic
         if save_interval > 0 and filename and (episode + 1) % save_interval == 0:
             save_network(filename)
             print(f"Network saved at episode {episode + 1}")
 
-    print(f"Training finished. Final Epsilon: {epsilon:.4f}")
-    # return total_rewards_per_episode # Optional zurückgeben für Analyse
+
+# Ergänze zum Beispiel eine Q-Learning-Trainingsmethode:
+# def train_q_learning(env, episodes, alpha=0.01, gamma=0.99, initial_epsilon=1.0, min_epsilon=0.01, epsilon_decay_rate=0.995, clip_grad_value=1.0, save_interval=0, filename=None): # Added save_interval and filename
+#     epsilon = initial_epsilon
+#     # Optional: Liste für das Plotten von Belohnungen
+#     # total_rewards_per_episode = []
+
+#     for episode in range(episodes):
+#         result = env.reset()
+#         if isinstance(result, tuple):
+#             state, info = result
+#         else:
+#             state = result
+
+#         done = False
+#         current_episode_total_reward = 0
+
+#         # Fortschrittsanzeige seltener, um die Konsole nicht zu überfluten
+#         if episode % 50 == 0:
+#             print(f"Episode {episode}/{episodes}, Epsilon: {epsilon:.4f}")
+
+#         while not done:
+#             state_vec = _to_one_hot(state, env.observation_space.n)
+#             q_values = net.forward(state_vec.reshape(1, -1))
+
+#             if np.random.rand() < epsilon:
+#                 action = env.action_space.sample()
+#             else:
+#                 action = np.argmax(q_values)
+
+#             next_state, reward, done, info = env.step(action)
+#             current_episode_total_reward += reward
+            
+#             next_state_vec = _to_one_hot(next_state, env.observation_space.n)
+#             next_q = net.forward(next_state_vec.reshape(1, -1))
+
+#             target_q = q_values.copy()
+#             if done:
+#                 target_q[0, action] = reward
+#             else:
+#                 target_q[0, action] = reward + gamma * np.max(next_q)
+
+#             # Stelle sicher, dass state_vec die korrekte Form für X in backward hat
+#             # Call backward with loss_type="mse" for Q-learning and gradient clipping
+#             net.backward(target_q, q_values, state_vec.reshape(1, -1), alpha, loss_type="mse", clip_value=clip_grad_value)
+#             state = next_state
+        
+#         # total_rewards_per_episode.append(current_episode_total_reward)
+
+#         # Epsilon-Decay
+#         if epsilon > min_epsilon:
+#             epsilon *= epsilon_decay_rate
+#         # Alternativ: epsilon = max(min_epsilon, epsilon - decay_value_per_episode)
+
+#         # Autosave logic
+#         if save_interval > 0 and filename and (episode + 1) % save_interval == 0:
+#             save_network(filename)
+#             print(f"Network saved at episode {episode + 1}")
+
+#     print(f"Training finished. Final Epsilon: {epsilon:.4f}")
+#     # return total_rewards_per_episode # Optional zurückgeben für Analyse
