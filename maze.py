@@ -94,26 +94,26 @@ class Maze:
         done = False
 
         if not (0 <= new_y < self.size[0] and 0 <= new_x < self.size[1]):
-            reward = -20 
+            reward = -0.2 
             # Player position does not change, state remains old state
             current_state = self._get_state() 
         else:
             cell_type = self.structure[new_y][new_x]
             if cell_type == 1: # Wall
-                reward = -40
+                reward = -0.04
                 # Player position does not change
             elif cell_type == 2: # End point
-                reward = 400
+                reward = 4
                 done = True
                 self.player_position = (new_y, new_x) 
             elif cell_type == 0 or cell_type == 3: # Empty space or Start point
                 # reward = -1
                 if old_exit_distance > new_exit_distance:
-                    reward += 10
+                    reward += 0.1
                 else:
-                    reward -= 15
+                    reward -= 0.15
                 if (new_y, new_x) in self.memory:
-                    reward -= 25
+                    reward -= 0.25
                 self.player_position = (new_y, new_x)
 
             current_state = self._get_state()

@@ -108,7 +108,9 @@ class Game:
                 'gap_y': (next_pipe.height + next_pipe.gap // 2) if next_pipe else screen.get_height() // 2,
                 'width': next_pipe.width if next_pipe else 0 
             },
-            'pipes_list': self.pipes # Pass the whole list for the Env to iterate if needed
+            'pipes_list': self.pipes,
+            'score': self.score,
+            'highscore': highscore
         }
 
 
@@ -119,7 +121,7 @@ class Game:
         """
         global highscore
         game_over = False
-        reward = 0.1 # Base reward for staying alive
+        reward = 5 # Base reward for staying alive
 
         # Apply action
         if action == 1: # Jump
@@ -130,7 +132,7 @@ class Game:
         # Check for bird hitting ground/ceiling
         if self.bird.y > screen.get_height() - self.bird.height or self.bird.y < 0:
             game_over = True
-            reward = -100 # Penalty for hitting ground/ceiling
+            reward -= 100 # Penalty for hitting ground/ceiling
 
         # Pipe generation
         self.frame += 1
@@ -142,12 +144,12 @@ class Game:
             colliding, scored, remove = pipe.update_and_check(self.bird)
             if colliding:
                 game_over = True
-                reward = -100 # Penalty for hitting pipe
+                reward -= 100 # Penalty for hitting pipe
             if scored:
                 self.score += 1
                 if self.score > highscore:
                     highscore = self.score
-                reward = 10 # Reward for passing pipe
+                reward += 200 # Reward for passing pipe
             if remove:
                 pipes_to_remove.append(pipe)
         

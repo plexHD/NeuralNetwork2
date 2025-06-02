@@ -1,6 +1,8 @@
 import numpy as np
 import json
 import os
+import random
+from collections import deque
 
 # --- Neural Network Class --- #
 class Layer:
@@ -13,7 +15,6 @@ class Layer:
             self.activation_derivative = relu_derivative
         elif activation_function == sigmoid:
             self.activation_derivative = sigmoid_derivative
-        # Add other activation functions and their derivatives if needed
 
         self.weights = np.random.randn(input_size, size) * 0.01
         self.biases = np.zeros((1, size))
@@ -107,10 +108,26 @@ class Network:
         # Recalculate loss based on the type (optional, if needed outside)
         if loss_type == "cross_entropy":
             loss = cross_entropy_loss(y_true, y_pred) # y_pred here is a_last
-        elif loss_type == "mse":
+        if loss_type == "mse":
             loss = mse_loss(y_true, y_pred) # y_pred here is a_last
         return loss
     
+    def clone(self):
+        # Create a deep copy of the network (for target network)
+        clone_net = Network()
+        for layer in self.layers:
+            new_layer = Layer(layer.size, layer.input_size, layer.activation_function)
+            new_layer.weights = np.copy(layer.weights)
+            new_layer.biases = np.copy(layer.biases)
+            clone_net.layers.append(new_layer)
+        return clone_net
+
+    def set_weights(self, other_net):
+        # Copy weights from another network
+        for l_self, l_other in zip(self.layers, other_net.layers):
+            l_self.weights = np.copy(l_other.weights)
+            l_self.biases = np.copy(l_other.biases)
+
 # --- Activation functions --- #
 def sigmoid(x):
     return 1 / (1 + np.exp(-x))
@@ -268,16 +285,17 @@ def convert_structure(state):
             vec.append(cell)
     return np.array(vec)
 
-def q_train(env, episodes, learning_rate=0.001, gamma=0.99, epsilon=1, min_epsilon=0.01, epsilon_decay=0.995, clip_grad_value=1.0, save_interval=0, filename=None, max_steps=1000):
+def q_train(env, episodes, learning_rate=0.001, gamma=0.99, epsilon=1, min_epsilon=0.01, epsilon_decay=0.995, clip_grad_value=0.5, save_interval=0, filename=None, max_steps=1000, target_update_freq=20):
+    replay_buffer = deque(maxlen=10000)
+    batch_size = 32
+    global net
+    target_net = net.clone()  # Initialize target network
+
     for episode in range(episodes):
-        state = env.reset() # Assuming env.reset() returns the initial state
+        state = env.reset()
         done = False
         step_count = 0
-        total_reward = 0
-
         while not done:
-            step_count += 1
-            # state_vec = _to_one_hot(state, env.observation_space_n)
             state_vec = convert_structure(state) 
             q_values = net.forward(state_vec.reshape(1, -1))
 
@@ -287,26 +305,38 @@ def q_train(env, episodes, learning_rate=0.001, gamma=0.99, epsilon=1, min_epsil
                 action = np.argmax(q_values)
 
             next_state, reward, done, info = env.step(action)
-            total_reward += reward
-            
-            next_state_vec = convert_structure(next_state) # Use the attribute directly
-            next_q = net.forward(next_state_vec.reshape(1, -1))
-
-            target_q = q_values.copy()
-            if done:
-                target_q[0, action] = reward
-            else:
-                target_q[0, action] = reward + gamma * np.max(next_q)
-            
-            net.backward(target_q, q_values, state_vec.reshape(1, -1), learning_rate, loss_type="mse", clip_value=clip_grad_value)
+            state_vec = convert_structure(state)
+            next_state_vec = convert_structure(next_state)
+            replay_buffer.append((state_vec, action, reward, next_state_vec, done))
             state = next_state
-            if step_count >= max_steps:
-                done = True
-        
+
+            # Only train if enough samples in buffer
+            if len(replay_buffer) >= batch_size:
+                batch = random.sample(replay_buffer, batch_size)
+                for state_b, action_b, reward_b, next_state_b, done_b in batch:
+                    # Compute target Q-value using target network
+                    q_values = net.forward(state_b.reshape(1, -1))
+                    next_q_values = target_net.forward(next_state_b.reshape(1, -1))
+                    target = q_values.copy()
+                    if done_b:
+                        target[0, action_b] = reward_b
+                    else:
+                        target[0, action_b] = reward_b + gamma * np.max(next_q_values)
+                    # Backpropagate
+                    loss = net.backward(target, q_values, state_b.reshape(1, -1), learning_rate, loss_type="mse", clip_value=clip_grad_value)
+                    total_reward = reward_b
+            step_count += 1
         epsilon = max(min_epsilon, epsilon * epsilon_decay)
 
-        if episode % 10 == 0:
-            print(f"Episode {episode}/{episodes}, Total Reward: {total_reward}, Epsilon: {epsilon:.4f}, Steps: {step_count}")
+        # Update target network every target_update_freq episodes
+        if (episode + 1) % target_update_freq == 0:
+            target_net.set_weights(net)
+
+        # Print average loss for the episode if available
+        if 'loss' in locals():
+            print(f"Episode {episode}/{episodes}, Loss: {loss}, Total Reward: {locals().get('total_reward', 'N/A')}, Epsilon: {epsilon:.4f}, Steps: {step_count}")
+        else:
+            print(f"Episode {episode}/{episodes}, Total Reward: {locals().get('total_reward', 'N/A')}, Epsilon: {epsilon:.4f}, Steps: {step_count}")
 
         if save_interval > 0 and filename and (episode + 1) % save_interval == 0:
             save_network(filename)
@@ -314,7 +344,7 @@ def q_train(env, episodes, learning_rate=0.001, gamma=0.99, epsilon=1, min_epsil
 
 
 # Ergänze zum Beispiel eine Q-Learning-Trainingsmethode:
-# def train_q_learning(env, episodes, alpha=0.01, gamma=0.99, initial_epsilon=1.0, min_epsilon=0.01, epsilon_decay_rate=0.995, clip_grad_value=1.0, save_interval=0, filename=None): # Added save_interval and filename
+# def train_q_learning(env, episodes, alpha=0.01, gamma=0.99, initial_epsilon=1.0, min_epsilon=0.01, epsilon_decay_rate=0.995, clip_grad_value=1.0, save_interval=0, filename=None):
 #     epsilon = initial_epsilon
 #     # Optional: Liste für das Plotten von Belohnungen
 #     # total_rewards_per_episode = []
