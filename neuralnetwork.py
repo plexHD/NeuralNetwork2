@@ -55,10 +55,10 @@ class Network:
         batch_size = y_true.shape[0]
         
         # Calculate initial error (dL/dz_last or dL/da_last)
-        if loss_type == "cross_entropy": # Typically used with softmax output
+        if loss_type == "cross_entropy": 
             # For Softmax + CrossEntropy, y_pred - y_true is dL/dz_last
             error = y_pred - y_true 
-        elif loss_type == "mse": # Typically used with linear output for regression/Q-values
+        elif loss_type == "mse":
             # For Linear + MSE, y_pred - y_true is dL/da_last.
             # Since (da_last/dz_last) = 1 for linear, dL/dz_last = dL/da_last * 1 = y_pred - y_true
             error = y_pred - y_true
@@ -105,7 +105,6 @@ class Network:
             layer.weights -= learning_rate * layer.dw
             layer.biases -= learning_rate * layer.db
         
-        # Recalculate loss based on the type (optional, if needed outside)
         if loss_type == "cross_entropy":
             loss = cross_entropy_loss(y_true, y_pred) # y_pred here is a_last
         if loss_type == "mse":
@@ -187,7 +186,6 @@ def create_network(input_size, output_size, hidden_layers):
             net.addLayer(size, current_processing_input_size, activation_fn)
             current_processing_input_size = size # Output of this layer is input to next
     
-    # Output layer for Q-values should be linear
     net.addLayer(output_size, current_processing_input_size, raw) # Use raw (linear) activation
     print(f"Network created with input size {input_size}, output size {output_size}, and hidden layers {hidden_layers}")
 
@@ -300,7 +298,7 @@ def q_train(env, episodes, learning_rate=0.001, gamma=0.99, epsilon=1, min_epsil
             q_values = net.forward(state_vec.reshape(1, -1))
 
             if np.random.rand() < epsilon:
-                action = env.action_space_sample() # Use the method directly
+                action = env.action_space_sample()
             else:
                 action = np.argmax(q_values)
 
@@ -310,7 +308,6 @@ def q_train(env, episodes, learning_rate=0.001, gamma=0.99, epsilon=1, min_epsil
             replay_buffer.append((state_vec, action, reward, next_state_vec, done))
             state = next_state
 
-            # Only train if enough samples in buffer
             if len(replay_buffer) >= batch_size:
                 batch = random.sample(replay_buffer, batch_size)
                 for state_b, action_b, reward_b, next_state_b, done_b in batch:
@@ -341,65 +338,3 @@ def q_train(env, episodes, learning_rate=0.001, gamma=0.99, epsilon=1, min_epsil
         if save_interval > 0 and filename and (episode + 1) % save_interval == 0:
             save_network(filename)
             print(f"Network saved at episode {episode + 1}")
-
-
-# Ergänze zum Beispiel eine Q-Learning-Trainingsmethode:
-# def train_q_learning(env, episodes, alpha=0.01, gamma=0.99, initial_epsilon=1.0, min_epsilon=0.01, epsilon_decay_rate=0.995, clip_grad_value=1.0, save_interval=0, filename=None):
-#     epsilon = initial_epsilon
-#     # Optional: Liste für das Plotten von Belohnungen
-#     # total_rewards_per_episode = []
-
-#     for episode in range(episodes):
-#         result = env.reset()
-#         if isinstance(result, tuple):
-#             state, info = result
-#         else:
-#             state = result
-
-#         done = False
-#         current_episode_total_reward = 0
-
-#         # Fortschrittsanzeige seltener, um die Konsole nicht zu überfluten
-#         if episode % 50 == 0:
-#             print(f"Episode {episode}/{episodes}, Epsilon: {epsilon:.4f}")
-
-#         while not done:
-#             state_vec = _to_one_hot(state, env.observation_space.n)
-#             q_values = net.forward(state_vec.reshape(1, -1))
-
-#             if np.random.rand() < epsilon:
-#                 action = env.action_space.sample()
-#             else:
-#                 action = np.argmax(q_values)
-
-#             next_state, reward, done, info = env.step(action)
-#             current_episode_total_reward += reward
-            
-#             next_state_vec = _to_one_hot(next_state, env.observation_space.n)
-#             next_q = net.forward(next_state_vec.reshape(1, -1))
-
-#             target_q = q_values.copy()
-#             if done:
-#                 target_q[0, action] = reward
-#             else:
-#                 target_q[0, action] = reward + gamma * np.max(next_q)
-
-#             # Stelle sicher, dass state_vec die korrekte Form für X in backward hat
-#             # Call backward with loss_type="mse" for Q-learning and gradient clipping
-#             net.backward(target_q, q_values, state_vec.reshape(1, -1), alpha, loss_type="mse", clip_value=clip_grad_value)
-#             state = next_state
-        
-#         # total_rewards_per_episode.append(current_episode_total_reward)
-
-#         # Epsilon-Decay
-#         if epsilon > min_epsilon:
-#             epsilon *= epsilon_decay_rate
-#         # Alternativ: epsilon = max(min_epsilon, epsilon - decay_value_per_episode)
-
-#         # Autosave logic
-#         if save_interval > 0 and filename and (episode + 1) % save_interval == 0:
-#             save_network(filename)
-#             print(f"Network saved at episode {episode + 1}")
-
-#     print(f"Training finished. Final Epsilon: {epsilon:.4f}")
-#     # return total_rewards_per_episode # Optional zurückgeben für Analyse
